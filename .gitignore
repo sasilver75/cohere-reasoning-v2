@@ -1,0 +1,5 @@
+venv/
+.env
+datasets/cn_k12_math_problems.csv
+.vscode/
+\\
