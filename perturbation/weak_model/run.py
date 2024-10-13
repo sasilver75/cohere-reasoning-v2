@@ -10,22 +10,23 @@ from dotenv import load_dotenv
 from tqdm.asyncio import tqdm as atqdm
 
 load_dotenv()
+print(f"Key: {os.getenv('COHERE_API_KEY')}")
 co = AsyncClientV2(api_key=os.getenv("COHERE_API_KEY"))
 
 ProcessResult = namedtuple("ProcessResult", ["candidate_solution", "audit"])
 
-solution_model_name = (
-    "command"  # Instruction-following conversational model that performs language tasks with high quality (4k ctx)
-)
+# solution_model_name = (
+#     "command"  # Instruction-following conversational model that performs language tasks with high quality (4k ctx)
+# )
 # solution_model_name = "command-light"  # Smaller, faster version of command; almost as capable (4k ctx)
-# solution_model_name = "command-r-03-2024"  # Instruction-following conversational model (128k ctx)
+solution_model_name = "command-r-03-2024"  # Instruction-following conversational model (128k ctx)
 
 verifier_model_name = "command-r-plus-08-2024"  # Most capable as of 10/12/2024
 
 
 async def generate_candidate_solution(problem: str, index: int) -> str:
     try:
-        response = asyncio.wait_for(
+        response = await asyncio.wait_for(
             co.chat(
                 model=solution_model_name,
                 messages=[{"role": "user", "content": prompts.GENERATE_SOLUTION_PROMPT.format(problem=problem)}],
@@ -36,7 +37,7 @@ async def generate_candidate_solution(problem: str, index: int) -> str:
     except asyncio.TimeoutError as e:
         print(f"Timeout occurred when generating candidate solution for row {index}: {e}")
         raise e
-    return response.message.context[0].text
+    return response.message.content[0].text
 
 
 def extract_verification_result(verification_response: str) -> bool:
@@ -60,7 +61,7 @@ async def verify_solution(problem: str, solution: str, candidate_solution: str, 
     Given that we're looking for a failed response, return True if an error is encountered.
     """
     try:
-        response = asyncio.wait_for(
+        response = await asyncio.wait_for(
             co.chat(
                 model=solution_model_name,
                 messages=[
@@ -80,7 +81,7 @@ async def verify_solution(problem: str, solution: str, candidate_solution: str, 
         return True  # Default to True if an error is encountered
 
     # Extract the verification result from the response
-    return extract_verification_result(response.message.context[0].text)
+    return extract_verification_result(response.message.content[0].text)
 
 
 async def process_row(df: pd.DataFrame, index: int) -> ProcessResult:
@@ -145,7 +146,7 @@ async def process_data(df: pd.DataFrame) -> list[dict]:
 
 
 async def main():
-    n = 10
+    n = 3
     source_filename = "datasets/cn_k12_math_problems.csv"
     output_filename = f"datasets/cn_k12_math_problems_weak_solutions_{n}.csv"
     audit_filename = f"datasets/cn_k12_math_problems_weak_audits_{n}.csv"
