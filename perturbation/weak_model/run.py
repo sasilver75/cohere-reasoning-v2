@@ -28,7 +28,7 @@ async def generate_candidate_solution(problem: str, index: int) -> str:
         response = asyncio.wait_for(
             co.chat(
                 model=solution_model_name,
-                messages=[{"role": "user", "content": prompts.generate_solution_prompt.format(problem=problem)}],
+                messages=[{"role": "user", "content": prompts.GENERATE_SOLUTION_PROMPT.format(problem=problem)}],
                 temperature=0.5,
             ),
             timeout=45,
@@ -66,7 +66,7 @@ async def verify_solution(problem: str, solution: str, candidate_solution: str, 
                 messages=[
                     {
                         "role": "user",
-                        "content": prompts.verify_solution_prompt.format(
+                        "content": prompts.VERIFY_SOLUTION_PROMPT.format(
                             problem=problem, solution=solution, candidate_solution=candidate_solution
                         ),
                     },
@@ -83,7 +83,7 @@ async def verify_solution(problem: str, solution: str, candidate_solution: str, 
     return extract_verification_result(response.message.context[0].text)
 
 
-async def process_row(df: pd.Dataframe, index: int) -> ProcessResult:
+async def process_row(df: pd.DataFrame, index: int) -> ProcessResult:
     row = df.iloc[index]
     problem = row["problem"]
     solution = row["solution"]
@@ -113,7 +113,7 @@ async def process_row(df: pd.Dataframe, index: int) -> ProcessResult:
     return ProcessResult(candidate_solution=candidate_solution, audit=audit)
 
 
-async def process_data(df: pd.Dataframe) -> list[dict]:
+async def process_data(df: pd.DataFrame) -> list[dict]:
     """
     For every row in the dataframe, generate solutions using a weaker model until one is found that is incorrect.
     Add the incorrect solution to the dataframe.
