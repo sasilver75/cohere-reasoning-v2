@@ -9,8 +9,6 @@ from cohere import AsyncClientV2
 from dotenv import load_dotenv
 from tqdm.asyncio import tqdm as atqdm
 
-from ... import utils
-
 load_dotenv()
 co = AsyncClientV2(api_key=os.getenv("COHERE_API_KEY"))
 
@@ -138,35 +136,38 @@ async def process_data(df: pd.Dataframe) -> list[dict]:
     for result in results:
         candidate_solutions.append(result.candidate_solution)
         audits.append(result.audit)
+    audit_df = pd.DataFrame(audits)
 
     # attach the bad solution to the dataframe
     df["bad_solution"] = candidate_solutions
 
-    # save the audits
-    output_filename = f"datasets/cn_k12_math_problems_weak_model_audits.csv"
-    pd.DataFrame(audits).to_csv(output_filename, index=False)
-    print(f"Saved audit of data processing to {output_filename}")
-
-    return df
+    return df, audit_df
 
 
 async def main():
-    source_filename = "datasets/cn_k12_math_problems.csv"
-
     n = 10
+    source_filename = "datasets/cn_k12_math_problems.csv"
+    output_filename = f"datasets/cn_k12_math_problems_weak_solutions_{n}.csv"
+    audit_filename = f"datasets/cn_k12_math_problems_weak_audits_{n}.csv"
 
     # Load dataframe
+    print("Loading dataframe...")
     df = pd.read_csv(source_filename, nrows=n)
+    print("Loaded dataframe!")
 
     # Process the dataframe
     print(f"Processing {n} rows...")
-    processed: pd.DataFrame = await process_data(df)
-    print(f"Finished processing {len(processed)} rows!")
+    processed_df, audit_df = await process_data(df)
+    print(f"Finished processing {n} rows!")
 
     # Save results to CSV
-    output_filename = f"datasets/cn_k12_math_problems_bad_solutions_{n}.csv"
-    processed.to_csv(output_filename, index=False)
+    print("Saving results to CSV...")
+    processed_df.to_csv(output_filename, index=False)
     print(f"Saved results to {output_filename}")
+    audit_df.to_csv(audit_filename, index=False)
+    print(f"Saved audit of data processing to {audit_filename}")
+
+    print("Done!")
 
 
 if __name__ == "__main__":
