@@ -14,7 +14,7 @@ train_df["set"] = "train"
 test_df["set"] = "test"
 df = pd.concat([train_df, test_df])
 df = df[df["source"] == "cn_k12"]
-df["index"] = range(1, len(df) + 1)
+df["index"] = range(len(df))
 
 # Save to csv
 df.to_csv(file_path, index=False)
