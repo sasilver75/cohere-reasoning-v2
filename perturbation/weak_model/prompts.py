@@ -25,14 +25,10 @@ Step 4: Using the sine law, we have $\sin C = \sqrt{{1 - \cos^2 C}} = \sqrt{{1 -
 Step 5: The area of $\triangle ABC$ is given by $S = \frac{{1}}{{2}}ab \sin C \leq \frac{{1}}{{2}} \cdot \frac{{9}}{{4}} \cdot \frac{{4\sqrt{{5}}}}{{9}} = \boxed{{\frac{{\sqrt{{5}}}}{{2}}}}$.
 
 Step 6: Therefore, the maximum area of $\triangle ABC$ is $\boxed{{\frac{{\sqrt{{5}}}}{{2}}}}$.
-
-<answer>
-\frac{{\sqrt{{5}}}}{{2}}
-</answer>
 </example_solution>
 </example>
 
-It is import that you present the final answer in <answer></answer> tags.
+It is critical that, like in the example above, you box the answer to subproblems that are explicitly stated in the problem, and that you box your final answer.
 """
 
 VERIFY_SOLUTION_PROMPT = """
@@ -44,17 +40,20 @@ Here's a ground-truth problem and its solution:
 {solution}
 </solution>
 
-Here's a candidate solution:
+Here's a candidate solution that may or may not be correct:
 <candidate_solution>
 {candidate_solution}
 </candidate_solution>
 
-The candidate solution should have its final answer in <answer></answer> tags.
+The candidate solution _should_ have boxed (e.g. using the \\boxed{{...}} command) the answers to both explicitly stated subproblems and the final answer.
 
-Given the above information, reason about whether the candidate solution is correct, comparing the 
-candidate answer in <answer></answer> tags to the ground-truth solution's final answer.
+Given the above information, reason about whether the candidate solution is correct, where correctness is defined as producing a correct final answer.
 
-Present your reasoning in <verification_reasoning></verification_reasoning> tags.
+First, reason about whether the solution is correct in <verification_reasoning></verification_reasoning> tags, specifically indicating the step and manner in which the reasoning may have gone wrong, if it did.
 
-Then, determine whether the candidate solution is "Correct" or "Incorrect" in <verification_result></verification_result> tags.
+Then, determine whether the candidate solution is either "Correct" or "Incorrect" in <verification_result></verification_result> tags.
+
+Finally, inside <verification_prefix></verification_prefix> tags:
+    - If the candidate solution is "Incorrect", explicitly restate (WITHOUT modifying the wording, structure, or intent of the candidate solution) the candidate solution UP TO AND INCLUDING the first incorrect step. You should include the "Step" prefixes for each step in the candidate solution.
+ - Otherwise, if the candidate solution is "Correct", you can populate the inside of <verification_prefix></verification_prefix> tags with "N/A".
 """

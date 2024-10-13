@@ -1,6 +1,5 @@
 import pandas as pd
-from flask import Flask, render_template_string, request, redirect, url_for
-import ast
+from flask import Flask, render_template_string, request
 import os
 
 app = Flask(__name__)
@@ -17,13 +16,6 @@ except Exception as e:
     print(f"Error reading CSV file: {e}")
     exit(1)
 
-# Function to parse string representations of lists
-def parse_list(list_str):
-    try:
-        return ast.literal_eval(list_str)
-    except:
-        return []
-
 @app.route('/')
 def index():
     page = request.args.get('page', 1, type=int)
@@ -31,14 +23,10 @@ def index():
         page = 1
     
     row = df.iloc[page-1]
-    audit = {
+    comparison = {
         'index': row.get('index', 'N/A'),
         'problem': row.get('problem', 'N/A'),
-        'solution': row.get('solution', 'N/A'),
-        'attempts': parse_list(row.get('attempts', '[]')),
-        'attempts_verification_traces': parse_list(row.get('attempts_verification_traces', '[]')),
         'candidate_solution': row.get('candidate_solution', 'N/A'),
-        'candidate_solution_verification_trace': row.get('candidate_solution_verification_trace', 'N/A'),
         'candidate_solution_verification_prefix': row.get('candidate_solution_verification_prefix', 'N/A')
     }
 
@@ -48,7 +36,7 @@ def index():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Math Problem Audits</title>
+        <title>Solution Comparison</title>
         <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
         <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
         <script>
@@ -69,22 +57,21 @@ def index():
                 font-family: Arial, sans-serif; 
                 line-height: 1.6; 
                 padding: 20px;
-                max-width: 800px;
+                max-width: 1200px;
                 margin: 0 auto;
             }
-            .filepath {
-                background-color: #f0f0f0;
-                padding: 10px;
+            .comparison { 
+                display: flex;
+                justify-content: space-between;
                 margin-bottom: 20px;
-                font-family: monospace;
             }
-            .audit { 
-                border: 1px solid #ddd; 
-                padding: 20px; 
-                margin-bottom: 20px;
+            .column {
+                width: 48%;
+                border: 1px solid #ddd;
+                padding: 10px;
             }
             h2, h3 { color: #333; }
-            .math-content, .verification-trace, .verification-prefix { 
+            .math-content { 
                 background-color: #f4f4f4; 
                 padding: 10px; 
                 word-wrap: break-word;
@@ -92,13 +79,6 @@ def index():
                 white-space: normal;
                 margin-bottom: 10px;
             }
-            .verification-trace {
-                background-color: #e6f3ff;
-            }
-            .verification-prefix {
-                background-color: #fff0e6;
-            }
-            .attempts { margin-left: 20px; }
             .navigation { 
                 display: flex; 
                 justify-content: space-between; 
@@ -120,34 +100,18 @@ def index():
         </style>
     </head>
     <body>
-        <div class="filepath">Data source: {{ csv_path }}</div>
-        <h1>Math Problem Audit ({{ page }}/{{ total_pages }})</h1>
-        <div class="audit">
-            <h2>Index: {{ audit.index }}</h2>
-            
-            <h2>Problem:</h2>
-            <div class="math-content">{{ audit.problem }}</div>
-            
-            <h2>Ground Truth Solution:</h2>
-            <div class="math-content">{{ audit.solution }}</div>
-            
-            <h2>Candidate Solution (Incorrect):</h2>
-            <div class="math-content">{{ audit.candidate_solution }}</div>
-            
-            <h3>Candidate Solution Verification Trace:</h3>
-            <div class="verification-trace">{{ audit.candidate_solution_verification_trace }}</div>
-            
-            <h3>Candidate Solution Verification Prefix:</h3>
-            <div class="verification-prefix">{{ audit.candidate_solution_verification_prefix }}</div>
-            
-            <h2>Correct Attempts:</h2>
-            <div class="attempts">
-                {% for attempt, trace in zip(audit.attempts, audit.attempts_verification_traces) %}
-                    <h3>Attempt {{ loop.index }}:</h3>
-                    <div class="math-content">{{ attempt }}</div>
-                    <h4>Verification Trace:</h4>
-                    <div class="verification-trace">{{ trace }}</div>
-                {% endfor %}
+        <h1>Solution Comparison ({{ page }}/{{ total_pages }})</h1>
+        <h2>Index: {{ comparison.index }}</h2>
+        <h2>Problem:</h2>
+        <div class="math-content">{{ comparison.problem }}</div>
+        <div class="comparison">
+            <div class="column">
+                <h3>Candidate Solution:</h3>
+                <div class="math-content">{{ comparison.candidate_solution }}</div>
+            </div>
+            <div class="column">
+                <h3>Verification Prefix:</h3>
+                <div class="math-content">{{ comparison.candidate_solution_verification_prefix }}</div>
             </div>
         </div>
         <div class="navigation">
@@ -164,9 +128,8 @@ def index():
         </div>
     </body>
     </html>
-    ''', audit=audit, page=page, total_pages=len(df), zip=zip, csv_path=csv_path)
+    ''', comparison=comparison, page=page, total_pages=len(df))
 
 if __name__ == '__main__':
     print(f"Starting server. CSV file path: {csv_path}")
-    print("Server is running. Access it at: http://localhost:5000")
-    app.run(debug=True, host='localhost', port=5000)
+    app.run(debug=True, host='localhost', port=6000)
