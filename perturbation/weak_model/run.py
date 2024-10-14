@@ -16,13 +16,8 @@ ProcessResult = namedtuple(
     "ProcessResult", ["candidate_solution", "verification_trace", "verification_prefix", "audit"]
 )
 
-# solution_model_name = (
-#     "command"  # Instruction-following conversational model that performs language tasks with high quality (4k ctx)
-# )
-# solution_model_name = "command-light"  # Smaller, faster version of command; almost as capable (4k ctx)
 solution_model_name = "command-r-03-2024"  # Instruction-following conversational model (128k ctx)
-
-verifier_model_name = "command-r-plus-08-2024"  # Most capable as of 10/12/2024
+verifier_model_name = "command-r-plus-08-2024"  # Most capable as of 10/12/2024 (128k ctx)
 
 
 async def generate_candidate_solution(problem: str, index: int) -> str:
@@ -98,7 +93,7 @@ async def verify_solution(problem: str, solution: str, candidate_solution: str, 
     return extract_verification_data(response.message.content[0].text)
 
 
-async def process_row(df: pd.DataFrame, index: int) -> ProcessResult:
+async def process_row(df: pd.DataFrame) -> ProcessResult:
     row = df.iloc[index]
     problem = row["problem"]
     solution = row["solution"]
@@ -153,10 +148,12 @@ async def process_data(df: pd.DataFrame) -> list[dict]:
     Mutates given dataframe and returns a reference to it.
     """
     tasks = []
+    # Kick off the tasks
     for index in range(len(df)):
         tasks.append(process_row(df, index))
 
     results: list[ProcessResult] = []
+    # Collect the results of the tasks
     # Using tqdm.asyncio.tqdm to get a progress bar for each batch.
     for task in atqdm(asyncio.as_completed(tasks), total=len(df), desc=f"Processing {len(df)} rows"):
         # In the context of using asyncio.as_completed above, the tasks still run concurrenty, and this loop processes them as they complete.
@@ -177,10 +174,11 @@ async def process_data(df: pd.DataFrame) -> list[dict]:
     audit_df = pd.DataFrame(audits)
 
     # attach the bad solution to the dataframe
-    df["bad_solution"] = candidate_solutions
-    df["bad_solution_verification_trace"] = candidate_solutions_verification_traces
-    df["bad_solution_verification_prefix"] = candidate_solutions_verification_prefixes
-    return df, audit_df
+    new_df = df.copy()
+    new_df["bad_solution"] = candidate_solutions
+    new_df["bad_solution_verification_trace"] = candidate_solutions_verification_traces
+    new_df["bad_solution_verification_prefix"] = candidate_solutions_verification_prefixes
+    return new_df, audit_df
 
 
 async def main():
