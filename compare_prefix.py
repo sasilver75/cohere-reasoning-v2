@@ -1,11 +1,12 @@
+import os
+
 import pandas as pd
 from flask import Flask, render_template_string, request
-import os
 
 app = Flask(__name__)
 
 # Load the CSV file
-csv_path = "datasets/cn_k12_math_problems_weak_audits_5.csv"
+csv_path = "datasets/cn_k12_math_problems_weak_audits_10.csv"
 if not os.path.exists(csv_path):
     print(f"Error: CSV file not found at {csv_path}")
     exit(1)
@@ -16,21 +17,25 @@ except Exception as e:
     print(f"Error reading CSV file: {e}")
     exit(1)
 
-@app.route('/')
+
+@app.route("/")
 def index():
-    page = request.args.get('page', 1, type=int)
+    page = request.args.get("page", 1, type=int)
     if page < 1 or page > len(df):
         page = 1
-    
-    row = df.iloc[page-1]
+
+    row = df.iloc[page - 1]
     comparison = {
-        'index': row.get('index', 'N/A'),
-        'problem': row.get('problem', 'N/A'),
-        'candidate_solution': row.get('candidate_solution', 'N/A'),
-        'candidate_solution_verification_prefix': row.get('candidate_solution_verification_prefix', 'N/A')
+        "index": row.get("index", "N/A"),
+        "problem": row.get("problem", "N/A"),
+        "solution": row.get("solution", "N/A"),
+        "candidate_solution": row.get("candidate_solution", "N/A"),
+        "candidate_solution_verification_trace": row.get("candidate_solution_verification_trace", "N/A"),
+        "candidate_solution_verification_prefix": row.get("candidate_solution_verification_prefix", "N/A"),
     }
 
-    return render_template_string('''
+    return render_template_string(
+        """
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -57,7 +62,7 @@ def index():
                 font-family: Arial, sans-serif; 
                 line-height: 1.6; 
                 padding: 20px;
-                max-width: 1200px;
+                max-width: 1400px; /* Increased from 1200px to 1400px */
                 margin: 0 auto;
             }
             .comparison { 
@@ -78,6 +83,11 @@ def index():
                 overflow-wrap: break-word;
                 white-space: normal;
                 margin-bottom: 10px;
+            }
+            .verification-trace {
+                background-color: #e6f3ff;
+                padding: 10px;
+                margin-top: 10px;
             }
             .navigation { 
                 display: flex; 
@@ -104,6 +114,8 @@ def index():
         <h2>Index: {{ comparison.index }}</h2>
         <h2>Problem:</h2>
         <div class="math-content">{{ comparison.problem }}</div>
+        <h2>Solution:</h2>
+        <div class="math-content">{{ comparison.solution }}</div>
         <div class="comparison">
             <div class="column">
                 <h3>Candidate Solution:</h3>
@@ -114,6 +126,8 @@ def index():
                 <div class="math-content">{{ comparison.candidate_solution_verification_prefix }}</div>
             </div>
         </div>
+        <h4>Verification Trace:</h4>
+        <div class="verification-trace">{{ comparison.candidate_solution_verification_trace }}</div>
         <div class="navigation">
             {% if page > 1 %}
                 <a href="{{ url_for('index', page=page-1) }}">Back</a>
@@ -128,8 +142,13 @@ def index():
         </div>
     </body>
     </html>
-    ''', comparison=comparison, page=page, total_pages=len(df))
+    """,
+        comparison=comparison,
+        page=page,
+        total_pages=len(df),
+    )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     print(f"Starting server. CSV file path: {csv_path}")
-    app.run(debug=True, host='localhost', port=6000)
+    app.run(debug=True, host="localhost", port=8080)

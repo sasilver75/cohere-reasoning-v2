@@ -1,12 +1,13 @@
-import pandas as pd
-from flask import Flask, render_template_string, request, redirect, url_for
 import ast
 import os
+
+import pandas as pd
+from flask import Flask, redirect, render_template_string, request, url_for
 
 app = Flask(__name__)
 
 # Load the CSV file
-csv_path = "datasets/cn_k12_math_problems_weak_audits_5.csv"
+csv_path = "datasets/cn_k12_math_problems_weak_audits_10.csv"
 if not os.path.exists(csv_path):
     print(f"Error: CSV file not found at {csv_path}")
     exit(1)
@@ -17,6 +18,7 @@ except Exception as e:
     print(f"Error reading CSV file: {e}")
     exit(1)
 
+
 # Function to parse string representations of lists
 def parse_list(list_str):
     try:
@@ -24,25 +26,27 @@ def parse_list(list_str):
     except:
         return []
 
-@app.route('/')
+
+@app.route("/")
 def index():
-    page = request.args.get('page', 1, type=int)
+    page = request.args.get("page", 1, type=int)
     if page < 1 or page > len(df):
         page = 1
-    
-    row = df.iloc[page-1]
+
+    row = df.iloc[page - 1]
     audit = {
-        'index': row.get('index', 'N/A'),
-        'problem': row.get('problem', 'N/A'),
-        'solution': row.get('solution', 'N/A'),
-        'attempts': parse_list(row.get('attempts', '[]')),
-        'attempts_verification_traces': parse_list(row.get('attempts_verification_traces', '[]')),
-        'candidate_solution': row.get('candidate_solution', 'N/A'),
-        'candidate_solution_verification_trace': row.get('candidate_solution_verification_trace', 'N/A'),
-        'candidate_solution_verification_prefix': row.get('candidate_solution_verification_prefix', 'N/A')
+        "index": row.get("index", "N/A"),
+        "problem": row.get("problem", "N/A"),
+        "solution": row.get("solution", "N/A"),
+        "attempts": parse_list(row.get("attempts", "[]")),
+        "attempts_verification_traces": parse_list(row.get("attempts_verification_traces", "[]")),
+        "candidate_solution": row.get("candidate_solution", "N/A"),
+        "candidate_solution_verification_trace": row.get("candidate_solution_verification_trace", "N/A"),
+        "candidate_solution_verification_prefix": row.get("candidate_solution_verification_prefix", "N/A"),
     }
 
-    return render_template_string('''
+    return render_template_string(
+        """
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -164,9 +168,16 @@ def index():
         </div>
     </body>
     </html>
-    ''', audit=audit, page=page, total_pages=len(df), zip=zip, csv_path=csv_path)
+    """,
+        audit=audit,
+        page=page,
+        total_pages=len(df),
+        zip=zip,
+        csv_path=csv_path,
+    )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     print(f"Starting server. CSV file path: {csv_path}")
     print("Server is running. Access it at: http://localhost:5000")
-    app.run(debug=True, host='localhost', port=5000)
+    app.run(debug=True, host="localhost", port=5000)

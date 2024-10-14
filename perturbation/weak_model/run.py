@@ -12,7 +12,9 @@ from tqdm.asyncio import tqdm as atqdm
 load_dotenv()
 co = AsyncClientV2(api_key=os.getenv("COHERE_API_KEY"))
 
-ProcessResult = namedtuple("ProcessResult", ["candidate_solution", "verification_trace", "verification_prefix", "audit"])
+ProcessResult = namedtuple(
+    "ProcessResult", ["candidate_solution", "verification_trace", "verification_prefix", "audit"]
+)
 
 # solution_model_name = (
 #     "command"  # Instruction-following conversational model that performs language tasks with high quality (4k ctx)
@@ -48,7 +50,9 @@ def extract_verification_data(verification_response: str) -> tuple[bool, str, st
     match = re.search(verification_pattern, verification_response, re.DOTALL)
     if not match:
         print(f"Could not parse verification result for {verification_response}")
-    verified = match.group(1).strip().lower() == "correct" if match else True  # Default to True if no match is found (indicating an error)
+    verified = (
+        match.group(1).strip().lower() == "correct" if match else True
+    )  # Default to True if no match is found (indicating an error)
 
     verification_reasoning_pattern = r"<verification_reasoning>(.*?)</verification_reasoning>"
     match = re.search(verification_reasoning_pattern, verification_response, re.DOTALL)
@@ -73,7 +77,7 @@ async def verify_solution(problem: str, solution: str, candidate_solution: str, 
     try:
         response = await asyncio.wait_for(
             co.chat(
-                model=solution_model_name,
+                model=verifier_model_name,
                 messages=[
                     {
                         "role": "user",
@@ -111,7 +115,9 @@ async def process_row(df: pd.DataFrame, index: int) -> ProcessResult:
             continue
 
         # Verify the candidate solution
-        verified_correct, verification_trace, verification_prefix = await verify_solution(problem, solution, candidate_solution, index)
+        verified_correct, verification_trace, verification_prefix = await verify_solution(
+            problem, solution, candidate_solution, index
+        )
 
         if verified_correct:
             # The candidate solution is verified as correct, so we add it to the list of failed attempts (to get a wrong answer)
@@ -131,7 +137,12 @@ async def process_row(df: pd.DataFrame, index: int) -> ProcessResult:
         "candidate_solution_verification_prefix": verification_prefix,
     }
 
-    return ProcessResult(candidate_solution=candidate_solution, verification_trace=verification_trace, verification_prefix=verification_prefix, audit=audit)
+    return ProcessResult(
+        candidate_solution=candidate_solution,
+        verification_trace=verification_trace,
+        verification_prefix=verification_prefix,
+        audit=audit,
+    )
 
 
 async def process_data(df: pd.DataFrame) -> list[dict]:
@@ -162,7 +173,7 @@ async def process_data(df: pd.DataFrame) -> list[dict]:
         candidate_solutions_verification_prefixes.append(result.verification_prefix)
         audits.append(result.audit)
     # Sort the audits by the index key
-    audits = sorted(audits, key=lambda x: x['index'])
+    audits = sorted(audits, key=lambda x: x["index"])
     audit_df = pd.DataFrame(audits)
 
     # attach the bad solution to the dataframe
@@ -173,7 +184,7 @@ async def process_data(df: pd.DataFrame) -> list[dict]:
 
 
 async def main():
-    n = 5
+    n = 10
     source_filename = "datasets/cn_k12_math_problems.csv"
     output_filename = f"datasets/cn_k12_math_problems_weak_solutions_{n}.csv"
     audit_filename = f"datasets/cn_k12_math_problems_weak_audits_{n}.csv"
