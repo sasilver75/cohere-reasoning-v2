@@ -29,6 +29,7 @@ Step 6: Therefore, the maximum area of $\triangle ABC$ is $\boxed{{\frac{{\sqrt{
 </example>
 
 It is critical that, like in the example above, you box the answer to subproblems that are explicitly stated in the problem, and that you box your final answer.
+Use newline characters between steps.
 """
 
 VERIFY_SOLUTION_PROMPT = """
@@ -50,10 +51,20 @@ The candidate solution _should_ have boxed (e.g. using the \\boxed{{...}} comman
 Given the above information, reason about whether the candidate solution is correct, where correctness is defined as producing a correct final answer.
 
 First, reason about whether the solution is correct in <verification_reasoning></verification_reasoning> tags, specifically indicating the step and manner in which the reasoning may have gone wrong, if it did.
+If the correct answer is produced, but not boxed, that should still be considered as a Correct solution.
 
 Then, determine whether the candidate solution is either "Correct" or "Incorrect" in <verification_result></verification_result> tags.
 
 Finally, inside <verification_prefix></verification_prefix> tags:
     - If the candidate solution is "Incorrect", explicitly restate (It is absolutely critical that  you do not modifying the specific wording, structure, or intent of the candidate solution) the candidate solution UP TO AND INCLUDING the first incorrect step.You should include the "Step" prefixes for each step in the candidate solution.
-    - Otherwise, if the candidate solution is "Correct", you can populate the inside of <verification_prefix></verification_prefix> tags with "N/A".
+    - Otherwise, if the candidate solution is "Correct", populate the inside of <verification_prefix></verification_prefix> with the reason why the solution should be considered correct.
+"""
+
+# The idea is for this to match the format of the completion prompt in completion/prompts.py
+# So that we have a point of comparison as for what the strong model completion's WOULD have looked like, and
+# then we can compare it to the strong model's completion of the weak model's failed solution prefix.
+STRONG_COMPLETION_PROMPT = """
+{problem}
+
+Please solve this problem step-by-step, boxing the final answer.
 """

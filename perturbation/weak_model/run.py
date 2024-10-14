@@ -13,27 +13,84 @@ load_dotenv()
 co = AsyncClientV2(api_key=os.getenv("COHERE_API_KEY"))
 
 ProcessResult = namedtuple(
-    "ProcessResult", ["candidate_solution", "verification_trace", "verification_prefix", "audit"]
+    "ProcessResult", ["candidate_solution", "verification_trace", "verification_prefix", "strong_solution", "audit"]
 )
 
-solution_model_name = "command-r-03-2024"  # Instruction-following conversational model (128k ctx)
-verifier_model_name = "command-r-plus-08-2024"  # Most capable as of 10/12/2024 (128k ctx)
+weak_completer_name = "command-r-03-2024"  # Instruction-following conversational model (128k ctx)
+strong_completer_name = "command-r-plus-08-2024"  # Most capable as of 10/12/2024 (128k ctx)
+strong_verifier_name = "command-r-plus-08-2024"  # Most capable as of 10/12/2024 (128k ctx)
+
+
+async def generate_strong_solution(problem: str, index: int) -> str:
+    """
+    The point of this function is to generate our strong model's completion of the problem, so as to have
+    something to compare against the strong model's completion of the weak model's failed solution prefix.
+    """
+    retries_remaining = 3
+    while retries_remaining:
+        try:
+            response = await asyncio.wait_for(
+                co.chat(
+                    model=strong_completer_name,
+                    messages=[{"role": "user", "content": prompts.STRONG_COMPLETION_PROMPT.format(problem=problem)}],
+                ),
+                timeout=45,
+            )
+            return response.message.content[0].text
+        except asyncio.TimeoutError as e:
+            retries_remaining -= 1
+            print(f"Timeout occurred when generating strong solution for row {index}. Retrying.")
+            if not retries_remaining:
+                print(f"Max retries reached for row {index}. Raising exception.")
+                raise e
+            await asyncio.sleep(1)  # Short delay before retrying
+    # try:
+    #     response = await asyncio.wait_for(
+    #         co.chat(
+    #             model=strong_completer_name,
+    #             messages=[{"role": "user", "content": prompts.STRONG_COMPLETION_PROMPT.format(problem=problem)}],
+    #         ),
+    #         timeout=45,
+    #     )
+    # except asyncio.TimeoutError as e:
+    #     print(f"Timeout occurred when generating strong solution for row {index}: {e}")
+    #     raise e
+    # return response.message.content[0].text
 
 
 async def generate_candidate_solution(problem: str, index: int) -> str:
-    try:
-        response = await asyncio.wait_for(
-            co.chat(
-                model=solution_model_name,
-                messages=[{"role": "user", "content": prompts.GENERATE_SOLUTION_PROMPT.format(problem=problem)}],
-                temperature=0.6,
-            ),
-            timeout=45,
-        )
-    except asyncio.TimeoutError as e:
-        print(f"Timeout occurred when generating candidate solution for row {index}: {e}")
-        raise e
-    return response.message.content[0].text
+    retries_remaining = 3
+    while retries_remaining:
+        try:
+            response = await asyncio.wait_for(
+                co.chat(
+                    model=weak_completer_name,
+                    messages=[{"role": "user", "content": prompts.GENERATE_SOLUTION_PROMPT.format(problem=problem)}],
+                    temperature=0.6,
+                ),
+                timeout=45,
+            )
+            return response.message.content[0].text
+        except asyncio.TimeoutError as e:
+            retries_remaining -= 1
+            print(f"Timeout occurred when generating candidate solution for row {index}. Retrying.")
+            if not retries_remaining:
+                print(f"Max candidate_solution retries reached for row {index}. Raising exception.")
+                raise e
+            await asyncio.sleep(1)  # Short delay before retrying
+    # try:
+    #     response = await asyncio.wait_for(
+    #         co.chat(
+    #             model=weak_completer_name,
+    #             messages=[{"role": "user", "content": prompts.GENERATE_SOLUTION_PROMPT.format(problem=problem)}],
+    #             temperature=0.6,
+    #         ),
+    #         timeout=45,
+    #     )
+    # except asyncio.TimeoutError as e:
+    #     print(f"Timeout occurred when generating candidate solution for row {index}: {e}")
+    #     raise e
+    # return response.message.content[0].text
 
 
 def extract_verification_data(verification_response: str) -> tuple[bool, str, str]:
@@ -41,6 +98,14 @@ def extract_verification_data(verification_response: str) -> tuple[bool, str, st
     Given a verification response, return whether the verifiation response indicates that the candidate solution was correct.
     Given that we're looking for af ailed response, return True if an error is encountered
     """
+    # Extract reasoning
+    verification_reasoning_pattern = r"<verification_reasoning>(.*?)</verification_reasoning>"
+    match = re.search(verification_reasoning_pattern, verification_response, re.DOTALL)
+    if not match:
+        print(f"Could not parse verification reasoning for {verification_response}")
+    verification_reasoning = match.group(1).strip() if match else "(FAILED)"
+
+    # Extract result
     verification_pattern = r"<verification_result>(.*?)</verification_result>"
     match = re.search(verification_pattern, verification_response, re.DOTALL)
     if not match:
@@ -49,17 +114,12 @@ def extract_verification_data(verification_response: str) -> tuple[bool, str, st
         match.group(1).strip().lower() == "correct" if match else True
     )  # Default to True if no match is found (indicating an error)
 
-    verification_reasoning_pattern = r"<verification_reasoning>(.*?)</verification_reasoning>"
-    match = re.search(verification_reasoning_pattern, verification_response, re.DOTALL)
-    if not match:
-        print(f"Could not parse verification reasoning for {verification_response}")
-    verification_reasoning = match.group(1).strip() if match else "(FAILED TO MATCH VERIFICATION REASONING)"
-
+    # Extract prefix
     verification_prefix_pattern = r"<verification_prefix>(.*?)</verification_prefix>"
     match = re.search(verification_prefix_pattern, verification_response, re.DOTALL)
     if not match:
         print(f"Could not parse verification prefix for {verification_response}")
-    verification_prefix = match.group(1).strip() if match else ""
+    verification_prefix = match.group(1).strip() if match else "(FAILED)"
 
     return verified, verification_reasoning, verification_prefix
 
@@ -69,31 +129,57 @@ async def verify_solution(problem: str, solution: str, candidate_solution: str, 
     Return whether a candidate_solution is correct, given a ground-truth problem and its solution
     Given that we're looking for a failed response, return True if an error is encountered.
     """
-    try:
-        response = await asyncio.wait_for(
-            co.chat(
-                model=verifier_model_name,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompts.VERIFY_SOLUTION_PROMPT.format(
-                            problem=problem, solution=solution, candidate_solution=candidate_solution
-                        ),
-                    },
-                ],
-                temperature=0,  # Don't want any creativity on this, just an accurate True or False
-            ),
-            timeout=45,
-        )
-    except asyncio.TimeoutError as e:
-        print(f"Timeout occurred when verifying solution for row {index}: {e}")
-        return True, "(TIMEOUT)", ""  # Default to True if an error is encountered
+    retries_remaining = 3
+    while retries_remaining:
+        try:
+            response = await asyncio.wait_for(
+                co.chat(
+                    model=strong_verifier_name,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": prompts.VERIFY_SOLUTION_PROMPT.format(
+                                problem=problem, solution=solution, candidate_solution=candidate_solution
+                            ),
+                        },
+                    ],
+                    temperature=0,  # Don't want any creativity on this, just an accurate True or False
+                ),
+                timeout=45,
+            )
+            return extract_verification_data(response.message.content[0].text)
+        except asyncio.TimeoutError as e:
+            retries_remaining -= 1
+            print(f"Timeout occurred when verifying candidate solution for row {index}. Retrying.")
+            if not retries_remaining:
+                print(f"Max verification retries reached for row {index}.")
+                raise e
+            await asyncio.sleep(1)  # Short delay before retrying
+    # try:
+    #     response = await asyncio.wait_for(
+    #         co.chat(
+    #             model=strong_verifier_name,
+    #             messages=[
+    #                 {
+    #                     "role": "user",
+    #                     "content": prompts.VERIFY_SOLUTION_PROMPT.format(
+    #                         problem=problem, solution=solution, candidate_solution=candidate_solution
+    #                     ),
+    #                 },
+    #             ],
+    #             temperature=0,  # Don't want any creativity on this, just an accurate True or False
+    #         ),
+    #         timeout=45,
+    #     )
+    # except asyncio.TimeoutError as e:
+    #     print(f"Timeout occurred when verifying solution for row {index}: {e}")
+    #     return True, "(TIMEOUT)", ""  # Default to True if an error is encountered
 
-    # Extract the verification result from the response
-    return extract_verification_data(response.message.content[0].text)
+    # # Extract the verification result from the response
+    # return extract_verification_data(response.message.content[0].text)
 
 
-async def process_row(df: pd.DataFrame) -> ProcessResult:
+async def process_row(df: pd.DataFrame, index: int) -> ProcessResult:
     row = df.iloc[index]
     problem = row["problem"]
     solution = row["solution"]
@@ -121,6 +207,8 @@ async def process_row(df: pd.DataFrame) -> ProcessResult:
         else:
             found_failure = True
 
+    strong_solution = await generate_strong_solution(problem, index)
+
     audit = {
         "index": index,
         "problem": problem,
@@ -130,17 +218,19 @@ async def process_row(df: pd.DataFrame) -> ProcessResult:
         "candidate_solution": candidate_solution,
         "candidate_solution_verification_trace": verification_trace,
         "candidate_solution_verification_prefix": verification_prefix,
+        "strong_solution": strong_solution,
     }
 
     return ProcessResult(
         candidate_solution=candidate_solution,
         verification_trace=verification_trace,
         verification_prefix=verification_prefix,
+        strong_solution=strong_solution,
         audit=audit,
     )
 
 
-async def process_data(df: pd.DataFrame) -> list[dict]:
+async def process_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     For every row in the dataframe, generate solutions using a weaker model until one is found that is incorrect.
     Add the incorrect solution to the dataframe.
@@ -160,17 +250,22 @@ async def process_data(df: pd.DataFrame) -> list[dict]:
         result = await task
         results.append(result)
 
+    # Sort results by index key
+    results = sorted(results, key=lambda result: result.audit["index"])
+
     candidate_solutions = []
     candidate_solutions_verification_traces = []
     candidate_solutions_verification_prefixes = []
+    strong_solutions = []
     audits = []
     for result in results:
         candidate_solutions.append(result.candidate_solution)
         candidate_solutions_verification_traces.append(result.verification_trace)
         candidate_solutions_verification_prefixes.append(result.verification_prefix)
+        strong_solutions.append(result.strong_solution)
         audits.append(result.audit)
-    # Sort the audits by the index key
-    audits = sorted(audits, key=lambda x: x["index"])
+
+    # Create audit df
     audit_df = pd.DataFrame(audits)
 
     # attach the bad solution to the dataframe
@@ -178,19 +273,21 @@ async def process_data(df: pd.DataFrame) -> list[dict]:
     new_df["bad_solution"] = candidate_solutions
     new_df["bad_solution_verification_trace"] = candidate_solutions_verification_traces
     new_df["bad_solution_verification_prefix"] = candidate_solutions_verification_prefixes
+    new_df["strong_solution"] = strong_solutions
     return new_df, audit_df
 
 
 async def main():
-    n = 10
+    n = 50
     source_filename = "datasets/cn_k12_math_problems.csv"
     output_filename = f"datasets/cn_k12_math_problems_weak_solutions_{n}.csv"
     audit_filename = f"datasets/cn_k12_math_problems_weak_audits_{n}.csv"
 
     # Load dataframe
     print("Loading dataframe...")
+    # df = pd.read_csv(source_filename, nrows=n, skiprows=range(1, 15+1))
     df = pd.read_csv(source_filename, nrows=n)
-    print("Loaded dataframe!")
+    print(f"Loaded dataframe of {len(df)} records!")
 
     # Process the dataframe
     print(f"Processing {n} rows...")

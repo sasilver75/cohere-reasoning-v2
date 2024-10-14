@@ -12,7 +12,6 @@ Now, with this repository as your current working directory,create your virtual 
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install -r requirements-dev.txt
 ```
 
 To use the Cohere API, you'll need an API key. Create an `.env` file with the following:
@@ -21,6 +20,14 @@ COHERE_API_KEY=your_actual_api_key_here
 ```
 This environment variable file is git-ignored, so your precious credentials won't be checked into the git repository.
 
-## Project Structure
 
-...TBD...
+## Processing data
+To run the full pipeline to completion, do the following:
+
+Download the dataset from HuggingFace by running `python download_dataset.py`
+
+Generate weak solutions by running `python perturbation/weak_model/run.py`
+
+Generate completions by running `python completion/run.py`
+
+View the results of the completions by running `python audits__view_problem_solution_prefix_trace_completion.py`

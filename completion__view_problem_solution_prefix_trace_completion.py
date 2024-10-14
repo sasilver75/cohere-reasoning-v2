@@ -29,6 +29,8 @@ def index():
         "index": row.get("index", "N/A"),
         "problem": row.get("problem", "N/A"),
         "solution": row.get("solution", "N/A"),
+        "strong_solution": row.get("strong_solution", "N/A"),
+        "bad_solution": row.get("bad_solution", "No weak solution available"),
         "bad_solution_verification_prefix": row.get("bad_solution_verification_prefix", "N/A"),
         "bad_solution_verification_trace": row.get("bad_solution_verification_trace", "N/A"),
         "completion": row.get("completion", "N/A"),
@@ -114,22 +116,29 @@ def index():
     </head>
     <body>
         <h1>Completion Viewer ({{ page }}/{{ total_pages }})</h1>
+        <h2>Problem Index: {{ completion_data.index }}</h2>
         <div class="completion">
             <div class="section">
                 <h2>Problem:</h2>
                 <div class="math-content">{{ completion_data.problem }}</div>
                 
-                <h2>Solution:</h2>
+                <h2>Ground-Truth Solution:</h2>
                 <div class="math-content">{{ completion_data.solution }}</div>
+                
+                <h2>Strong Solution:</h2>
+                <div class="math-content">{{ completion_data.strong_solution }}</div>
             </div>
             <div class="section">
-                <h2>Bad Solution Verification Prefix:</h2>
+                <h2>Weak Solution:</h2>
+                <div class="math-content">{{ completion_data.bad_solution }}</div>
+                
+                <h2>Weak Solution Prefix:</h2>
                 <div class="connected-content">{{ completion_data.bad_solution_verification_prefix }}</div>
                 
-                <h3>Bad Solution Verification Trace:</h3>
+                <h3>Weak Solution Prefix Trace:</h3>
                 <div class="verification-trace">{{ completion_data.bad_solution_verification_trace }}</div>
                 
-                <h2>Completion:</h2>
+                <h2>Strong Completion:</h2>
                 <div class="connected-content">{{ completion_data.completion }}</div>
             </div>
         </div>
