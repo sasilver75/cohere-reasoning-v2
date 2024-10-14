@@ -34,6 +34,8 @@ def index():
         "bad_solution_verification_prefix": row.get("bad_solution_verification_prefix", "N/A"),
         "bad_solution_verification_trace": row.get("bad_solution_verification_trace", "N/A"),
         "completion": row.get("completion", "N/A"),
+        "completion_verified": row.get("completion_verified", "N/A"),
+        "completion_verification_trace": row.get("completion_verification_trace", "N/A"),
     }
 
     return render_template_string(
@@ -64,7 +66,7 @@ def index():
                 font-family: Arial, sans-serif; 
                 line-height: 1.6; 
                 padding: 20px;
-                max-width: 1600px; /* Increased max-width for more horizontal space */
+                max-width: 1800px; /* Increased max-width for more horizontal space */
                 margin: 0 auto;
             }
             .completion { 
@@ -93,6 +95,14 @@ def index():
             }
             .verification-trace {
                 background-color: #e6f3ff;
+            }
+            .completion-verified {
+                padding: 10px;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+                white-space: normal;
+                margin-bottom: 10px;
+                background-color: {{ 'green' if completion_data.completion_verified == 'True' else 'red' }};
             }
             .navigation { 
                 display: flex; 
@@ -125,21 +135,27 @@ def index():
                 <h2>Ground-Truth Solution:</h2>
                 <div class="math-content">{{ completion_data.solution }}</div>
                 
-                <h2>Strong Solution:</h2>
+                <h2>Strong Completer Solution:</h2>
                 <div class="math-content">{{ completion_data.strong_solution }}</div>
             </div>
             <div class="section">
-                <h2>Weak Solution:</h2>
+                <h2>Weak Completer Incorrect Solution:</h2>
                 <div class="math-content">{{ completion_data.bad_solution }}</div>
                 
-                <h2>Weak Solution Prefix:</h2>
+                <h2>Weak Completer Solution Prefix:</h2>
                 <div class="connected-content">{{ completion_data.bad_solution_verification_prefix }}</div>
                 
-                <h3>Weak Solution Prefix Trace:</h3>
+                <h3>Weak Solution Verification Trace:</h3>
                 <div class="verification-trace">{{ completion_data.bad_solution_verification_trace }}</div>
                 
                 <h2>Strong Completion:</h2>
                 <div class="connected-content">{{ completion_data.completion }}</div>
+                
+                <h2>Strong Completion Verification:</h2>
+                <div class="completion-verified">{{ completion_data.completion_verified }}</div>
+                
+                <h3>Strong Completion Verification Trace:</h3>
+                <div class="verification-trace">{{ completion_data.completion_verification_trace }}</div>
             </div>
         </div>
         <div class="navigation">

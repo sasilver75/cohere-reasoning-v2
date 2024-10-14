@@ -44,18 +44,6 @@ async def generate_strong_solution(problem: str, index: int) -> str:
                 print(f"Max retries reached for row {index}. Raising exception.")
                 raise e
             await asyncio.sleep(1)  # Short delay before retrying
-    # try:
-    #     response = await asyncio.wait_for(
-    #         co.chat(
-    #             model=strong_completer_name,
-    #             messages=[{"role": "user", "content": prompts.STRONG_COMPLETION_PROMPT.format(problem=problem)}],
-    #         ),
-    #         timeout=45,
-    #     )
-    # except asyncio.TimeoutError as e:
-    #     print(f"Timeout occurred when generating strong solution for row {index}: {e}")
-    #     raise e
-    # return response.message.content[0].text
 
 
 async def generate_candidate_solution(problem: str, index: int) -> str:
@@ -78,19 +66,6 @@ async def generate_candidate_solution(problem: str, index: int) -> str:
                 print(f"Max candidate_solution retries reached for row {index}. Raising exception.")
                 raise e
             await asyncio.sleep(1)  # Short delay before retrying
-    # try:
-    #     response = await asyncio.wait_for(
-    #         co.chat(
-    #             model=weak_completer_name,
-    #             messages=[{"role": "user", "content": prompts.GENERATE_SOLUTION_PROMPT.format(problem=problem)}],
-    #             temperature=0.6,
-    #         ),
-    #         timeout=45,
-    #     )
-    # except asyncio.TimeoutError as e:
-    #     print(f"Timeout occurred when generating candidate solution for row {index}: {e}")
-    #     raise e
-    # return response.message.content[0].text
 
 
 def extract_verification_data(verification_response: str) -> tuple[bool, str, str]:
@@ -155,28 +130,6 @@ async def verify_solution(problem: str, solution: str, candidate_solution: str, 
                 print(f"Max verification retries reached for row {index}.")
                 raise e
             await asyncio.sleep(1)  # Short delay before retrying
-    # try:
-    #     response = await asyncio.wait_for(
-    #         co.chat(
-    #             model=strong_verifier_name,
-    #             messages=[
-    #                 {
-    #                     "role": "user",
-    #                     "content": prompts.VERIFY_SOLUTION_PROMPT.format(
-    #                         problem=problem, solution=solution, candidate_solution=candidate_solution
-    #                     ),
-    #                 },
-    #             ],
-    #             temperature=0,  # Don't want any creativity on this, just an accurate True or False
-    #         ),
-    #         timeout=45,
-    #     )
-    # except asyncio.TimeoutError as e:
-    #     print(f"Timeout occurred when verifying solution for row {index}: {e}")
-    #     return True, "(TIMEOUT)", ""  # Default to True if an error is encountered
-
-    # # Extract the verification result from the response
-    # return extract_verification_data(response.message.content[0].text)
 
 
 async def process_row(df: pd.DataFrame, index: int) -> ProcessResult:

@@ -34,8 +34,4 @@ First, reason about whether the solution is correct in <verification_reasoning><
 If the correct answer is produced, but not boxed, that should still be considered as a Correct solution.
 
 Then, determine whether the candidate solution is either "Correct" or "Incorrect" in <verification_result></verification_result> tags.
-
-Finally, inside <verification_prefix></verification_prefix> tags:
-    - If the candidate solution is "Incorrect", explicitly restate (It is absolutely critical that  you do not modifying the specific wording, structure, or intent of the candidate solution) the candidate solution UP TO AND INCLUDING the first incorrect step.You should include the "Step" prefixes for each step in the candidate solution.
-    - Otherwise, if the candidate solution is "Correct", populate the inside of <verification_prefix></verification_prefix> with the reason why the solution should be considered correct.
 """

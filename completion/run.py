@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+from collections import namedtuple
 
 import pandas as pd
 import prompts
@@ -16,20 +17,26 @@ co_async = AsyncClientV2(key)
 strong_completer_name = "command-r-plus-08-2024"  # Most capable as of 10/12/2024 (128k ctx)
 strong_verifier_name = "command-r-plus-08-2024"
 
+VerificationResult = namedtuple("VerificationResult", ["index", "verified", "verification_trace"])
+
 
 def generate_completion(problem: str, prefix: str, index: int) -> str:
     user_turn = prompts.COMPLETION_PROMPT_USER.format(problem=problem)
     assistant_turn = prompts.COMPLETION_PROMPT_ASSISTANT.format(prefix=prefix)
     # TODO: Add a number of retries to get around timeout problems, which will be annoying when n=large
     # Consider using Tenacity library to do this.
-    completion = co.chat(
-        model=strong_completer_name,
-        message=prompts.RAW_COMPLETION_TEMPLATE.format(
-            user_turn=user_turn,
-            assistant_turn=assistant_turn,
-        ),
-        raw_prompting=True,
-    )
+    try:
+        completion = co.chat(
+            model=strong_completer_name,
+            message=prompts.RAW_COMPLETION_TEMPLATE.format(
+                user_turn=user_turn,
+                assistant_turn=assistant_turn,
+            ),
+            raw_prompting=True,
+        )
+    except Exception as e:
+        print(f"Error generating completion for row {index}: {e}")
+        raise e
     return completion.text
 
 
@@ -40,7 +47,7 @@ def complete_row(row: pd.Series):
     return generate_completion(problem, prefix, index)
 
 
-def extract_verification_data(verification_response: str) -> tuple[bool, str, str]:
+def extract_verification_data(verification_response: str) -> tuple[bool, str]:
     """
     Given a verification response, return whether the verifiation response indicates that the candidate solution was correct.
     Given that we're looking for af ailed response, return True if an error is encountered
@@ -61,22 +68,19 @@ def extract_verification_data(verification_response: str) -> tuple[bool, str, st
         match.group(1).strip().lower() == "correct" if match else True
     )  # Default to True if no match is found (indicating an error)
 
-    # Extract prefix
-    verification_prefix_pattern = r"<verification_prefix>(.*?)</verification_prefix>"
-    match = re.search(verification_prefix_pattern, verification_response, re.DOTALL)
-    if not match:
-        print(f"Could not parse verification prefix for {verification_response}")
-    verification_prefix = match.group(1).strip() if match else "(FAILED)"
-
-    return verified, verification_reasoning, verification_prefix
+    return verified, verification_reasoning
 
 
-async def verify_completion(problem: str, solution: str, completion: str, index: int) -> tuple[bool, str, str]:
+async def verify_completion(problem: str, solution: str, completion: str, index: int) -> tuple[bool, str]:
+    """
+    Given a problem, solution, and completion, verify the correctness of the completion using a strong verifier model.
+    Return a tuple with whether the verification was correct, and the verification reasoniong trace.
+    """
     retries_remaining = 3
     while retries_remaining:
         try:
             response = await asyncio.wait_for(
-                co.chat(
+                co_async.chat(
                     model=strong_verifier_name,
                     messages=[
                         {
@@ -100,7 +104,11 @@ async def verify_completion(problem: str, solution: str, completion: str, index:
             await asyncio.sleep(1)  # Short delay before retrying
 
 
-async def verify_row(row: pd.Series) -> tuple[int, bool, str]:
+async def verify_row(row: pd.Series) -> VerificationResult:
+    """
+    Given a dataframe row with a "bad_solution_verification_prefix" and "completion" column, verify the correctness of the completion
+    Return a VerificationResult with the index, whether the verification was correct, and the verification reasoniong trace.
+    """
     index = row["index"]
     problem = row["problem"]
     solution = row["solution"]
@@ -108,47 +116,50 @@ async def verify_row(row: pd.Series) -> tuple[int, bool, str]:
 
     verified_correct, verification_trace = await verify_completion(problem, solution, completion, index)
 
-    return index, verified_correct, verification_trace
+    return VerificationResult(index, verified_correct, verification_trace)
 
 
 async def verify_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Given a dataframe with a "bad_solution_verification_prefix" and "completion" column, verify the correctness of the completion
+    Return both a boolean of whether the answer is correct, as well as a trace of the verification reasoning.
+    """
     tasks = []
-    for index in range(len(df)):
-        tasks.append(verify_row(df, index))
-    results = []
+    for _, row in df.iterrows():
+        tasks.append(verify_row(row))
+    results: VerificationResult = []
 
-    for task in atqdm(asyncio.as_completed(tasks), total=len(df), desc=f"Verifying {len(df)} rows"):
+    for task in atqdm(asyncio.as_completed(tasks), total=len(df), desc=f"Verifying {len(df)} rows (Async)"):
         result = await task
         results.append(result)
 
-    # Sort results by index key
-    results = [result[1] for result in sorted(results, key=lambda x: x[0])]
+    # Sort results by index
+    results.sort(key=lambda x: x.index)
+    verifications = [result.verified for result in results]
+    verification_traces = [result.verification_trace for result in results]
+
+    new_df = df.copy()
+    new_df["completion_verified"] = verifications
+    new_df["completion_verification_trace"] = verification_traces
+
+    return new_df
 
 
-async def process_data(df: pd.DataFrame) -> pd.DataFrame:
+def complete_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Synchronously generation completions for each row, and then asynchronously verify the completions.
+    """
     new_df = df.copy()
 
     # Let's synchronously generate completions for each row, first.
     completions = []
-    print("Generation completions...")
-    for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing rows"):
+    for _, row in tqdm(df.iterrows(), total=len(df), desc=f"Completing {len(df)} rows (Sync)"):
         index = row["index"]
         completion = complete_row(row)
         completions.append((index, completion))
     completions = [completion[1] for completion in sorted(completions, key=lambda x: x[0])]
+
     new_df["completion"] = completions
-    print("Completions generated!")
-
-    # Now, let's verify those responses (we can do this async, which is kinda nice for speedup).
-    print("Verifying completions...")
-    for _, row in tqdm(new_df.iterrows(), total=len(new_df), desc="Processing rows"):
-        index = row["index"]
-        completion = row["completion"]
-        verification_trace, verification_prefix = await verify_row(row)
-        new_df.at[index, "verification_trace"] = verification_trace
-        new_df.at[index, "verification_prefix"] = verification_prefix
-    print("Completions verified!")
-
     return new_df
 
 
@@ -162,14 +173,19 @@ async def main():
     df = pd.read_csv(source_filename, nrows=n)
     print("Loaded dataframe!")
 
-    # Process the dataframe
-    print(f"Processing {n} rows...")
-    processed_df = await process_data(df)
+    # Generate completions for the dataframe (sync)
+    print(f"Completing {n} rows...")
+    completed_df = complete_data(df)
     print(f"Finished processing {n} rows!")
+
+    # Verify the completions (async)
+    print(f"Verifying {n} completions...")
+    verified_df = await verify_data(completed_df)
+    print(f"Finished verifying {n} completions!")
 
     # Save results to CSV
     print("Saving results to CSV...")
-    processed_df.to_csv(output_filename, index=False)
+    verified_df.to_csv(output_filename, index=False)
     print(f"Saved results to {output_filename}")
 
     print("Done!")
