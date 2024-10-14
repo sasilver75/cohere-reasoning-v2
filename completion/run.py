@@ -1,4 +1,3 @@
-import asyncio
 import os
 
 import pandas as pd
@@ -17,17 +16,21 @@ completion_model_name = "command-r-plus-08-2024"  # Most capable as of 10/12/202
 def generate_completion(problem: str, prefix: str, index: int) -> str:
     user_turn = prompts.COMPLETION_PROMPT_USER.format(problem=problem)
     assistant_turn = prompts.COMPLETION_PROMPT_ASSISTANT.format(prefix=prefix)
-    completion = co.generate(
+    completion = co.chat(
         model=completion_model_name,  # Replace with your desired model
-        prompt=prompts.RAW_COMPLETION_TEMPLATE.format(user_turn=user_turn, assistant_turn=assistant_turn),
+        message=prompts.RAW_COMPLETION_TEMPLATE.format(
+            user_turn=user_turn,
+            assistant_turn=assistant_turn,
+        ),
+        raw_prompting=True,
     )
     return completion.text
 
 
-def process_row(df: pd.DataFrame, index: int):
-    index = df.iloc[index]["index"]
-    problem = df.iloc[index]["problem"]
-    prefix = df.iloc[index]["bad_solution_verification_prefix"]
+def process_row(row: pd.Series):
+    index = row["index"]
+    problem = row["problem"]
+    prefix = row["bad_solution_verification_prefix"]
     return generate_completion(problem, prefix, index)
 
 
@@ -37,7 +40,7 @@ def process_data(df: pd.DataFrame) -> pd.DataFrame:
     # Using tqdm.asyncio.tqdm to get a progress bar for each batch.
     for index, row in tqdm(df.iterrows(), total=len(df), desc="Processing rows"):
         print(f"Processing row {index}...")
-        completions.append(process_row(df, index))
+        completions.append(process_row(row))
 
     # Create a new dataframe with the completions added as a new column
     new_df = df.copy()
@@ -45,7 +48,7 @@ def process_data(df: pd.DataFrame) -> pd.DataFrame:
     return new_df
 
 
-async def main():
+def main():
     n = 10
     source_filename = "datasets/cn_k12_math_problems_weak_solutions_10.csv"
     output_filename = source_filename.replace("weak_solutions", "weak_solutions_completion")
@@ -57,7 +60,7 @@ async def main():
 
     # Process the dataframe
     print(f"Processing {n} rows...")
-    processed_df = await process_data(df)
+    processed_df = process_data(df)
     print(f"Finished processing {n} rows!")
 
     # Save results to CSV
@@ -69,4 +72,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
