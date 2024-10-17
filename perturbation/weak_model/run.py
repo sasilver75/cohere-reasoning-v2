@@ -199,7 +199,7 @@ async def process_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 async def main():
-    n = 3
+    n = 250
     source_filename = "datasets/original/cn_k12_math_problems.csv"
     output_filename = f"datasets/cn_k12_math_problems_weak_solutions_{n}.csv"
     audit_filename = f"datasets/cn_k12_math_problems_weak_audits_{n}.csv"
