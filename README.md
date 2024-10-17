@@ -30,4 +30,4 @@ Generate weak solutions by running `python perturbation/weak_model/run.py`
 
 Generate completions by running `python completion/run.py`
 
-View the results of the completions by running `python audits__view_problem_solution_prefix_trace_completion.py`
+View the results of the completions by running `python completion__view_problem_solution_prefix_trace_completion.py` (Make sure the file points to the correct CSV file)
