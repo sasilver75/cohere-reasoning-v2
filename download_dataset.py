@@ -5,7 +5,7 @@ import datasets
 dataset_name = "AI-MO/NuminaMath-CoT"
 dataset = datasets.load_dataset(dataset_name)
 
-file_path = "datasets/cn_k12_math_problems.csv"
+file_path = "datasets/original/cn_k12_math_problems.csv"
 
 # Combine train and test sets (keep info), filter to cn_k12, add index
 train_df = pd.DataFrame(dataset["train"])

@@ -26,7 +26,7 @@ async def generate_strong_solution(problem: str, index: int) -> str:
     The point of this function is to generate our strong model's completion of the problem, so as to have
     something to compare against the strong model's completion of the weak model's failed solution prefix.
     """
-    retries_remaining = 3
+    retries_remaining = 5
     while retries_remaining:
         try:
             response = await asyncio.wait_for(
@@ -34,7 +34,7 @@ async def generate_strong_solution(problem: str, index: int) -> str:
                     model=strong_completer_name,
                     messages=[{"role": "user", "content": prompts.STRONG_COMPLETION_PROMPT.format(problem=problem)}],
                 ),
-                timeout=45,
+                timeout=60,
             )
             return response.message.content[0].text
         except asyncio.TimeoutError as e:
@@ -47,7 +47,7 @@ async def generate_strong_solution(problem: str, index: int) -> str:
 
 
 async def generate_candidate_solution(problem: str, index: int) -> str:
-    retries_remaining = 3
+    retries_remaining = 5
     while retries_remaining:
         try:
             response = await asyncio.wait_for(
@@ -56,7 +56,7 @@ async def generate_candidate_solution(problem: str, index: int) -> str:
                     messages=[{"role": "user", "content": prompts.GENERATE_SOLUTION_PROMPT.format(problem=problem)}],
                     temperature=0.6,
                 ),
-                timeout=45,
+                timeout=60,
             )
             return response.message.content[0].text
         except asyncio.TimeoutError as e:
@@ -104,7 +104,7 @@ async def verify_solution(problem: str, solution: str, candidate_solution: str, 
     Return whether a candidate_solution is correct, given a ground-truth problem and its solution
     Given that we're looking for a failed response, return True if an error is encountered.
     """
-    retries_remaining = 3
+    retries_remaining = 5
     while retries_remaining:
         try:
             response = await asyncio.wait_for(
@@ -120,7 +120,7 @@ async def verify_solution(problem: str, solution: str, candidate_solution: str, 
                     ],
                     temperature=0,  # Don't want any creativity on this, just an accurate True or False
                 ),
-                timeout=45,
+                timeout=60,
             )
             return extract_verification_data(response.message.content[0].text)
         except asyncio.TimeoutError as e:
@@ -231,8 +231,8 @@ async def process_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 async def main():
-    n = 50
-    source_filename = "datasets/cn_k12_math_problems.csv"
+    n = 250
+    source_filename = "datasets/original/cn_k12_math_problems.csv"
     output_filename = f"datasets/cn_k12_math_problems_weak_solutions_{n}.csv"
     audit_filename = f"datasets/cn_k12_math_problems_weak_audits_{n}.csv"
 

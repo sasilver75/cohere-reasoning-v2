@@ -1,5 +1,5 @@
 venv/
 .env
-datasets/
+datasets/original/
 .vscode/
 **/__pycache__/

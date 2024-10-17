@@ -1,0 +1,16 @@
+Research Log
+
+...
+Recap:
+Perturbation:
+I'm at the point where I seem to have a reliable way to generate weak completions until I have a (strong-verified) incorrect solution.
+I'm then able to truncate the bad solution to the point of error.
+
+Completion:
+I'm then able to generate a strong completion continued the weak completion prefix.
+I then have the ability to use a strong verifier to verify the correctness of the strong completion.
+
+I have a number of scripts that create UIs to view results at various points
+audits__ operate on the data produced by Perturbation
+completion__ operate on the data produced by Compltion
+

@@ -2,11 +2,18 @@ import asyncio
 import os
 import re
 from collections import namedtuple
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 import pandas as pd
 import prompts
 from cohere import AsyncClientV2, Client
 from dotenv import load_dotenv
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 from tqdm import tqdm
 from tqdm.asyncio import tqdm as atqdm
 
@@ -20,13 +27,40 @@ strong_verifier_name = "command-r-plus-08-2024"
 VerificationResult = namedtuple("VerificationResult", ["index", "verified", "verification_trace"])
 
 
+# def generate_completion(problem: str, prefix: str, index: int) -> str:
+#     user_turn = prompts.COMPLETION_PROMPT_USER.format(problem=problem)
+#     assistant_turn = prompts.COMPLETION_PROMPT_ASSISTANT.format(prefix=prefix)
+#     # TODO: Add a number of retries to get around timeout problems, which will be annoying when n=large
+#     # Consider using Tenacity library to do this.
+#     try:
+#         completion = co.chat(
+#             model=strong_completer_name,
+#             message=prompts.RAW_COMPLETION_TEMPLATE.format(
+#                 user_turn=user_turn,
+#                 assistant_turn=assistant_turn,
+#             ),
+#             raw_prompting=True,
+#         )
+#     except Exception as e:
+#         print(f"Error generating completion for row {index}: {e}")
+#         raise e
+#     return completion.text
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception_type(Exception),
+    reraise=True,
+)
 def generate_completion(problem: str, prefix: str, index: int) -> str:
+    """It seems that this is working well, errors are occurring about every 50 or so when processing 250, and recovering.
+    The error isn't really printing out well though. I think it's because of timeouts."""
     user_turn = prompts.COMPLETION_PROMPT_USER.format(problem=problem)
     assistant_turn = prompts.COMPLETION_PROMPT_ASSISTANT.format(prefix=prefix)
-    # TODO: Add a number of retries to get around timeout problems, which will be annoying when n=large
-    # Consider using Tenacity library to do this.
-    try:
-        completion = co.chat(
+
+    def api_call():
+        return co.chat(
             model=strong_completer_name,
             message=prompts.RAW_COMPLETION_TEMPLATE.format(
                 user_turn=user_turn,
@@ -34,9 +68,17 @@ def generate_completion(problem: str, prefix: str, index: int) -> str:
             ),
             raw_prompting=True,
         )
+
+    try:
+        with ThreadPoolExecutor() as executor:
+            future = executor.submit(api_call)
+            completion = future.result(timeout=60)
     except Exception as e:
-        print(f"Error generating completion for row {index}: {e}")
+        print(f"Unexpected error generating completion for row {index}: {e}")
+        if isinstance(e, TimeoutError):
+            print(f"Error above is an instance of TimeoutError")
         raise e
+
     return completion.text
 
 
@@ -157,6 +199,7 @@ def complete_data(df: pd.DataFrame) -> pd.DataFrame:
         index = row["index"]
         completion = complete_row(row)
         completions.append((index, completion))
+    # Because these tasks will resolve out-of-order, we need to sort them by index before adding them to the dataframe
     completions = [completion[1] for completion in sorted(completions, key=lambda x: x[0])]
 
     new_df["completion"] = completions
@@ -164,24 +207,25 @@ def complete_data(df: pd.DataFrame) -> pd.DataFrame:
 
 
 async def main():
-    n = 10
-    source_filename = "datasets/cn_k12_math_problems_weak_solutions_10.csv"
+    n = None  # n = None means all records
+    source_filename = "datasets/cn_k12_math_problems_weak_solutions_250.csv"
     output_filename = source_filename.replace("weak_solutions", "weak_solutions_completion")
 
     # Load dataframe
     print("Loading dataframe...")
-    df = pd.read_csv(source_filename, nrows=n)
-    print("Loaded dataframe!")
+    df = pd.read_csv(source_filename, nrows=n) if n is not None else pd.read_csv(source_filename)
+    len_df = len(df)
+    print(f"Loaded dataframe of {len_df} rows!")
 
     # Generate completions for the dataframe (sync)
-    print(f"Completing {n} rows...")
+    print(f"Completing {len_df} rows...")
     completed_df = complete_data(df)
-    print(f"Finished processing {n} rows!")
+    print(f"Finished processing {len_df} rows!")
 
     # Verify the completions (async)
-    print(f"Verifying {n} completions...")
+    print(f"Verifying {len_df} completions...")
     verified_df = await verify_data(completed_df)
-    print(f"Finished verifying {n} completions!")
+    print(f"Finished verifying {len_df} completions!")
 
     # Save results to CSV
     print("Saving results to CSV...")
