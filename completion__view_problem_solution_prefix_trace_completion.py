@@ -6,7 +6,7 @@ from flask import Flask, render_template_string, request
 app = Flask(__name__)
 
 # Load the CSV file
-csv_path = "datasets/cn_k12_math_problems_weak_solutions_completion_10.csv"
+csv_path = "datasets/cn_k12_math_problems_weak_solutions_completion_250.csv"
 if not os.path.exists(csv_path):
     print(f"Error: CSV file not found at {csv_path}")
     exit(1)
