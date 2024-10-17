@@ -13,12 +13,37 @@ load_dotenv()
 co = AsyncClientV2(api_key=os.getenv("COHERE_API_KEY"))
 
 ProcessResult = namedtuple(
-    "ProcessResult", ["candidate_solution", "verification_trace", "verification_prefix", "audit"]
+    "ProcessResult", ["candidate_solution", "verification_trace", "verification_prefix", "strong_solution", "audit"]
 )
 
 weak_completer_name = "command-r-03-2024"  # Instruction-following conversational model (128k ctx)
 strong_completer_name = "command-r-plus-08-2024"  # Most capable as of 10/12/2024 (128k ctx)
 strong_verifier_name = "command-r-plus-08-2024"  # Most capable as of 10/12/2024 (128k ctx)
+
+
+async def generate_strong_solution(problem: str, index: int) -> str:
+    """
+    The point of this function is to generate our strong model's completion of the problem, so as to have
+    something to compare against the strong model's completion of the weak model's failed solution prefix.
+    """
+    retries_remaining = 5
+    while retries_remaining:
+        try:
+            response = await asyncio.wait_for(
+                co.chat(
+                    model=strong_completer_name,
+                    messages=[{"role": "user", "content": prompts.STRONG_COMPLETION_PROMPT.format(problem=problem)}],
+                ),
+                timeout=60,
+            )
+            return response.message.content[0].text
+        except asyncio.TimeoutError as e:
+            retries_remaining -= 1
+            print(f"Timeout occurred when generating strong solution for row {index}. Retrying.")
+            if not retries_remaining:
+                print(f"Max retries reached for row {index}. Raising exception.")
+                raise e
+            await asyncio.sleep(1)  # Short delay before retrying
 
 
 async def generate_candidate_solution(problem: str, index: int) -> str:
@@ -135,6 +160,8 @@ async def process_row(df: pd.DataFrame, index: int) -> ProcessResult:
         else:
             found_failure = True
 
+    strong_solution = await generate_strong_solution(problem, index)
+
     audit = {
         "index": index,
         "problem": problem,
@@ -144,12 +171,14 @@ async def process_row(df: pd.DataFrame, index: int) -> ProcessResult:
         "candidate_solution": candidate_solution,
         "candidate_solution_verification_trace": verification_trace,
         "candidate_solution_verification_prefix": verification_prefix,
+        "strong_solution": strong_solution,
     }
 
     return ProcessResult(
         candidate_solution=candidate_solution,
         verification_trace=verification_trace,
         verification_prefix=verification_prefix,
+        strong_solution=strong_solution,
         audit=audit,
     )
 
@@ -180,11 +209,13 @@ async def process_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     candidate_solutions = []
     candidate_solutions_verification_traces = []
     candidate_solutions_verification_prefixes = []
+    strong_solutions = []
     audits = []
     for result in results:
         candidate_solutions.append(result.candidate_solution)
         candidate_solutions_verification_traces.append(result.verification_trace)
         candidate_solutions_verification_prefixes.append(result.verification_prefix)
+        strong_solutions.append(result.strong_solution)
         audits.append(result.audit)
 
     # Create audit df
@@ -195,11 +226,12 @@ async def process_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     new_df["bad_solution"] = candidate_solutions
     new_df["bad_solution_verification_trace"] = candidate_solutions_verification_traces
     new_df["bad_solution_verification_prefix"] = candidate_solutions_verification_prefixes
+    new_df["strong_solution"] = strong_solutions
     return new_df, audit_df
 
 
 async def main():
-    n = 3
+    n = 250
     source_filename = "datasets/original/cn_k12_math_problems.csv"
     output_filename = f"datasets/cn_k12_math_problems_weak_solutions_{n}.csv"
     audit_filename = f"datasets/cn_k12_math_problems_weak_audits_{n}.csv"

@@ -27,26 +27,6 @@ strong_verifier_name = "command-r-plus-08-2024"
 VerificationResult = namedtuple("VerificationResult", ["index", "verified", "verification_trace"])
 
 
-# def generate_completion(problem: str, prefix: str, index: int) -> str:
-#     user_turn = prompts.COMPLETION_PROMPT_USER.format(problem=problem)
-#     assistant_turn = prompts.COMPLETION_PROMPT_ASSISTANT.format(prefix=prefix)
-#     # TODO: Add a number of retries to get around timeout problems, which will be annoying when n=large
-#     # Consider using Tenacity library to do this.
-#     try:
-#         completion = co.chat(
-#             model=strong_completer_name,
-#             message=prompts.RAW_COMPLETION_TEMPLATE.format(
-#                 user_turn=user_turn,
-#                 assistant_turn=assistant_turn,
-#             ),
-#             raw_prompting=True,
-#         )
-#     except Exception as e:
-#         print(f"Error generating completion for row {index}: {e}")
-#         raise e
-#     return completion.text
-
-
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -118,7 +98,7 @@ async def verify_completion(problem: str, solution: str, completion: str, index:
     Given a problem, solution, and completion, verify the correctness of the completion using a strong verifier model.
     Return a tuple with whether the verification was correct, and the verification reasoniong trace.
     """
-    retries_remaining = 3
+    retries_remaining = 5
     while retries_remaining:
         try:
             response = await asyncio.wait_for(
@@ -206,9 +186,82 @@ def complete_data(df: pd.DataFrame) -> pd.DataFrame:
     return new_df
 
 
+async def generate_strong_solution(problem: str, index: int) -> str:
+    """
+    The point of this function is to generate our strong model's completion of the problem, so as to have
+    something to compare against the strong model's completion of the weak model's failed solution prefix.
+    """
+    retries_remaining = 5
+    while retries_remaining:
+        try:
+            # For the strong solution, we want to use the same user prompt that we later use to generate strong completions of weak prefixes
+            response = await asyncio.wait_for(
+                co_async.chat(
+                    model=strong_completer_name,
+                    messages=[{"role": "user", "content": prompts.COMPLETION_PROMPT_USER.format(problem=problem)}],
+                ),
+                timeout=60,
+            )
+            return response.message.content[0].text
+        except asyncio.TimeoutError as e:
+            retries_remaining -= 1
+            print(f"Timeout occurred when generating strong solution for row {index}. Retrying.")
+            if not retries_remaining:
+                print(f"Max retries reached for row {index}. Raising exception.")
+                raise e
+            await asyncio.sleep(1)  # Short delay before retrying
+
+
+StraightShotResult = namedtuple("StraightShotResult", ["straight_shot_solution", "verification_trace", "verification"])
+
+
+async def solve_row(df: pd.DataFrame, index: int) -> pd.Series:
+    row = df.iloc[index]
+    problem = row["problem"]
+    solution = row["solution"]
+    index = row["index"]
+
+    # Get the straight shot solutoin
+    straight_shot_solution = await generate_strong_solution(problem, index)
+
+    # Verify it!
+    verified_correct, verification_trace = await verify_completion(problem, solution, straight_shot_solution, index)
+
+    # Package it up
+    return StraightShotResult(straight_shot_solution, verification_trace, verified_correct)
+
+
+async def solve_data(df: pd.DataFrame) -> pd.DataFrame:
+
+    tasks = []
+    for index in range(len(df)):
+        tasks.append(solve_row(df, index))
+
+    results: list[StraightShotResult] = []
+    for task in atqdm(asyncio.as_completed(tasks), total=len(df), desc=f"Solving and verifying {len(df)} rows (Async)"):
+        result = await task
+        results.append(result)
+
+    straight_shot_solutions = []
+    straight_shot_verifications = []
+    straight_shot_verification_traces = []
+    for result in results:
+        straight_shot_solutions.append(result.straight_shot_solution)
+        straight_shot_verification_traces.append(result.verification_trace)
+        straight_shot_verifications.append(result.verification)
+
+    # Now let's attach this stuff to a new dataframe
+    new_df = df.copy()
+    new_df["straight_shot_solution"] = straight_shot_solutions
+    new_df["straight_shot_verification"] = straight_shot_verifications
+    new_df["straight_shot_verification_trace"] = straight_shot_verification_traces
+
+    return new_df
+
+
 async def main():
     n = None  # n = None means all records
-    source_filename = "datasets/cn_k12_math_problems_weak_solutions_250.csv"
+    source_filename = "datasets/cn_k12_math_problems_weak_solutions_3.csv"
     output_filename = source_filename.replace("weak_solutions", "weak_solutions_completion")
 
     # Load dataframe
@@ -217,11 +270,15 @@ async def main():
     len_df = len(df)
     print(f"Loaded dataframe of {len_df} rows!")
 
-    # Generate completions for the dataframe (sync)
-    print(f"Completing {len_df} rows...")
-    completed_df = complete_data(df)
-    print(f"Finished processing {len_df} rows!")
+    # Generate straight-shot solutions and verify them (async)
+    print(f"Generating {len_df} straight-shot solutions...")
+    solved_df = await solve_data(df)
+    print(f"Finished generating {len_df} straight-shot solutions!")
 
+    # Generate completions for the dataframe (sync, since it's the completions API)
+    print(f"Completing {len_df} rows...")
+    completed_df = complete_data(solved_df)
+    print(f"Finished processing {len_df} rows!")
     # Verify the completions (async)
     print(f"Verifying {len_df} completions...")
     verified_df = await verify_data(completed_df)

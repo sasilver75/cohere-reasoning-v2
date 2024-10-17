@@ -6,7 +6,7 @@ from flask import Flask, render_template_string, request
 app = Flask(__name__)
 
 # Load the CSV file
-csv_path = "datasets/cn_k12_math_problems_weak_solutions_completion_250.csv"
+csv_path = "datasets/cn_k12_math_problems_weak_solutions_completion_3.csv"
 if not os.path.exists(csv_path):
     print(f"Error: CSV file not found at {csv_path}")
     exit(1)
@@ -36,6 +36,9 @@ def index():
         "completion": row.get("completion", "N/A"),
         "completion_verified": row.get("completion_verified", "N/A"),
         "completion_verification_trace": row.get("completion_verification_trace", "N/A"),
+        "straight_shot_solution": row.get("straight_shot_solution", "N/A"),
+        "straight_shot_verification": row.get("straight_shot_verification", "N/A"),
+        "straight_shot_verification_trace": row.get("straight_shot_verification_trace", "N/A"),
     }
 
     return render_template_string(
@@ -135,8 +138,14 @@ def index():
                 <h2>Ground-Truth Solution:</h2>
                 <div class="math-content">{{ completion_data.solution }}</div>
                 
-                <h2>Strong Completer Solution:</h2>
-                <div class="math-content">{{ completion_data.strong_solution }}</div>
+                <h2>Straight Shot Solution:</h2>
+                <div class="math-content">{{ completion_data.straight_shot_solution }}</div>
+                
+                <h3>Straight Shot Verification:</h3>
+                <div class="completion-verified">{{ completion_data.straight_shot_verification }}</div>
+                
+                <h3>Straight Shot Verification Trace:</h3>
+                <div class="verification-trace">{{ completion_data.straight_shot_verification_trace }}</div>
             </div>
             <div class="section">
                 <h2>Weak Completer Incorrect Solution:</h2>

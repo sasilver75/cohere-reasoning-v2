@@ -59,12 +59,3 @@ Finally, inside <verification_prefix></verification_prefix> tags:
     - If the candidate solution is "Incorrect", explicitly restate (It is absolutely critical that  you do not modifying the specific wording, structure, or intent of the candidate solution) the candidate solution UP TO AND INCLUDING the first incorrect step.You should include the "Step" prefixes for each step in the candidate solution.
     - Otherwise, if the candidate solution is "Correct", populate the inside of <verification_prefix></verification_prefix> with "N/A"
 """
-
-# The idea is for this to match the format of the completion prompt in completion/prompts.py
-# So that we have a point of comparison as for what the strong model completion's WOULD have looked like, and
-# then we can compare it to the strong model's completion of the weak model's failed solution prefix.
-STRONG_COMPLETION_PROMPT = """
-{problem}
-
-Please solve this problem step-by-step, boxing the final answer.
-"""
